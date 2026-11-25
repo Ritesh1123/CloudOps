@@ -1,9 +1,15 @@
-from fastapi import FastAPI
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.core.config import settings
+from app.db.session import engine
 
 
 app = FastAPI(
-    title="CloudOps API",
+    title=settings.APP_NAME,
     description="Cloud Infrastructure and Incident Management Platform",
     version="1.0.0"
 )
@@ -11,7 +17,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[settings.FRONTEND_ORIGIN],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,7 +33,29 @@ def root():
 
 
 @app.get("/health/live")
-def health_check():
+def liveness():
     return {
-        "status": "healthy"
+        "status": "healthy",
+        "application": "CloudOps API"
     }
+
+
+@app.get("/health/ready")
+def readiness():
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+
+        return {
+            "status": "ready",
+            "database": "connected"
+        }
+
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "not ready",
+                "database": "unavailable"
+            }
+        )
