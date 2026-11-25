@@ -7,6 +7,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import settings
 from app.db.session import engine
 
+from app.api.v1.auth import router as auth_router
+from app.api.v1.access import router as access_router
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -15,6 +18,7 @@ app = FastAPI(
 )
 
 
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.FRONTEND_ORIGIN],
@@ -24,8 +28,21 @@ app.add_middleware(
 )
 
 
+# Register API routers
+app.include_router(
+    auth_router,
+    prefix="/api/v1"
+)
+
+app.include_router(
+    access_router,
+    prefix="/api/v1"
+)
+
+
 @app.get("/")
 def root():
+
     return {
         "message": "Welcome to CloudOps",
         "status": "running"
@@ -34,6 +51,7 @@ def root():
 
 @app.get("/health/live")
 def liveness():
+
     return {
         "status": "healthy",
         "application": "CloudOps API"
@@ -42,7 +60,9 @@ def liveness():
 
 @app.get("/health/ready")
 def readiness():
+
     try:
+
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
 
@@ -52,6 +72,7 @@ def readiness():
         }
 
     except SQLAlchemyError:
+
         raise HTTPException(
             status_code=503,
             detail={
