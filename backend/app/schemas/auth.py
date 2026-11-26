@@ -27,21 +27,13 @@ class UserLogin(BaseModel):
 
 
 class UserResponse(BaseModel):
-
     id: int
-
     name: str
-
     email: EmailStr
-
     role: UserRole
-
     is_active: bool
 
-    model_config = ConfigDict(
-        from_attributes=True
-    )
-
+    model_config = ConfigDict(from_attributes=True)
 
 class TokenResponse(BaseModel):
 
