@@ -13,6 +13,17 @@ from datetime import datetime, timezone
 from app.models.service import Service, ServiceStatus
 from app.models.health_check import HealthCheck
 
+from app.core.config import settings
+
+from app.models.incident import (
+    Incident,
+    IncidentSeverity,
+    IncidentStatus
+)
+
+from app.models.incident_history import IncidentHistory
+from app.models.user import User, UserRole
+
 
 def validate_public_destination(url: str):
     """
@@ -110,8 +121,12 @@ def run_health_check(db: Session, service_id: int):
 
     if check_status == ServiceStatus.UP:
         service.consecutive_failures = 0
+
     else:
         service.consecutive_failures += 1
+
+        if service.consecutive_failures >= settings.FAILURE_THRESHOLD:
+            create_automatic_incident(db, service)
 
     db.commit()
     db.refresh(health_check)
@@ -162,3 +177,56 @@ def get_health_check_history(
         "page": page,
         "page_size": page_size
     }
+
+
+def create_automatic_incident(db: Session, service: Service):
+    existing_incident = db.scalar(
+        select(Incident).where(
+            Incident.service_id == service.id,
+            Incident.status != IncidentStatus.RESOLVED
+        ).limit(1)
+    )
+
+    if existing_incident:
+        return existing_incident
+
+    system_actor = db.scalar(
+        select(User)
+        .where(
+            User.role == UserRole.ADMIN,
+            User.is_active.is_(True)
+        )
+        .order_by(User.id.asc())
+        .limit(1)
+    )
+
+    if system_actor is None:
+        raise RuntimeError(
+            "Automatic incident creation requires an active Admin account"
+        )
+
+    incident = Incident(
+        service_id=service.id,
+        title=f"Service Down: {service.name}",
+        description=(
+            f"CloudOps detected {service.consecutive_failures} "
+            f"consecutive failed health checks for {service.name}."
+        ),
+        severity=IncidentSeverity.HIGH,
+        status=IncidentStatus.OPEN,
+        created_by_id=system_actor.id
+    )
+
+    db.add(incident)
+    db.flush()
+
+    history = IncidentHistory(
+        incident_id=incident.id,
+        user_id=system_actor.id,
+        old_status=None,
+        new_status=IncidentStatus.OPEN.value
+    )
+
+    db.add(history)
+
+    return incident

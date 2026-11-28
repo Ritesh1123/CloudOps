@@ -21,5 +21,7 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+    FAILURE_THRESHOLD: int = 3
+
 
 settings = Settings()
